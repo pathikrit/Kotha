@@ -44,10 +44,10 @@ public final class Kotha {
     private final static Map<Client, Connection> connections = Maps.newHashMap();
     private final static Map<Long, SettableFuture<Object>> apiCalls = Maps.newConcurrentMap();
 
-    private final static Constructor<API> constructor;
+    private final static Constructor<? extends API> constructor;
 
     static {
-        Constructor<API> ret;
+        Constructor<? extends API> ret;
         try {
             final String apiPkg = "common.API", clientPkg = "com.esotericsoftware.kryonet.Client";
             ClassPool classPool = ClassPool.getDefault();
@@ -56,7 +56,7 @@ public final class Kotha {
             classPool.importPackage("common.Kotha");
 
             CtClass apiInterface = classPool.get(apiPkg);
-            CtClass apiStub = classPool.makeClass("RemoteCaller");
+            CtClass apiStub = classPool.makeClass("common.RemoteCaller");
             apiStub.addInterface(apiInterface);
             apiStub.addField(CtField.make("private final Client client;", apiStub));
 
@@ -70,11 +70,10 @@ public final class Kotha {
                 apiStub.addMethod(remoteMethod);
             }
 
-            ret = ((Class<API>) apiStub.toClass()).getConstructor(Client.class);
+            @SuppressWarnings("unchecked") Class<? extends API> apiStubClass = (Class<? extends API>) apiStub.toClass();
+            ret = apiStubClass.getConstructor(Client.class);
         } catch (Throwable t) {
-            log.error("Could not generate Client API stub", t);
-            System.exit(-1);
-            ret = null;
+            ret = fatalExit("Could not generate Client API stub", t);
         }
         constructor = ret;
     }
@@ -105,8 +104,7 @@ public final class Kotha {
             });
             server.bind(tcpPort, udpPort);
         } catch (Throwable t) {
-            log.error("Could not start server", t);
-            System.exit(-1);
+            fatalExit("Could not start server", t);
         }
     }
 
@@ -136,9 +134,7 @@ public final class Kotha {
             client.connect(CONNECTION_TIMEOUT_MS, host, tcpPort, udpPort);
             return constructor.newInstance(client);
         } catch (Throwable t) {
-            log.error("Could not start client", t);
-            System.exit(-1);
-            return null;
+            return fatalExit("Could not start client", t);
         }
     }
 
@@ -157,7 +153,7 @@ public final class Kotha {
         }
     }
 
-    public static Future<Object> makeServerCall(Client client, String methodName, Object... args) {
+    static Future<Object> makeServerCall(Client client, String methodName, Object... args) {
         final long id = CLIENT_REQUESTS.incrementAndGet();
         SettableFuture<Object> future = SettableFuture.create();
         apiCalls.put(id, future);
@@ -169,8 +165,15 @@ public final class Kotha {
         Kryo kryo = endPoint.getKryo();
         kryo.register(RMIMessage.class);
         kryo.register(ArrayList.class);
+        // TODO: More Kryo serializers: https://github.com/magro/kryo-serializers
         endPoint.addListener(listener);
         endPoint.start();
+    }
+
+    private static <T> T fatalExit(String message, Throwable cause) {
+        log.error(message, cause);
+        System.exit(-1);
+        return null;
     }
 }
 
@@ -178,7 +181,7 @@ class RMIMessage {
 
     final long id;
     final String methodName;
-    final List<?> args;
+    final List<?> args; // TODO: just use Object array?
 
     final static transient Logger log = LoggerFactory.getLogger(RMIMessage.class);
     final static transient Map<String, Method> methodCache = Maps.newHashMap();

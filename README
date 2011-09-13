@@ -28,12 +28,6 @@ Kotha.java itself has only 4 public methods that you can call:
 3) There are 2 utility methods Kotha.createFuture and Kotha.getValueFromFuture that makes Future handling slightly easier
 
 TODO:
-1) Server monitoring framework
+1) Server monitoring & Perf testing frameworks
 2) One Client can talk to multiple servers
-3) Perf testing framework
-4) More Kryo serializers: https://github.com/magro/kryo-serializers
-5) Remove warnings
-6) Guice??
-7) log4j
-8) Serialize arrays in RMI
-9) Hide Kotha.makeServerCall
+3) Use Guice to bind APIs instead for Client?
