@@ -9,7 +9,7 @@
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="library" exported="" name="Kotha-Lib" level="project" />
+    <orderEntry type="library" exported="" name="Kotha Library" level="project" />
   </component>
 </module>
 
