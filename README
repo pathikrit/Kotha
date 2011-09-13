@@ -11,7 +11,7 @@ Current solutions:
 
 My solution:
 There is only a single 300-line Java code file that does all the work (Kotha.java) that you must read.
-In short I use Guice to inject a dynamically created client-side API stub using Javaassist that talks to the server using the KryoNet library and the server uses reflection to figure out which method to call. Neat huh?
+In short I use Guice to inject a dynamically created client-side API stub using Javassist that talks to the server using the KryoNet library and the server uses reflection to figure out which method to call. Neat huh?
 
 Usage:
 Here are the steps to add a new API method of your own. Let's say you want to add a new API "boolean isEven(int x)" which returns true iff x is even:

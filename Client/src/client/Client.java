@@ -1,7 +1,8 @@
 package client;
 
-import common.api.API;
-import common.kotha.Kotha;
+import common.API;
+import common.Kotha;
+
 import java.util.concurrent.Future;
 
 public class Client {

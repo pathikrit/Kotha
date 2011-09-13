@@ -1,6 +1,6 @@
 package server;
 
-import common.kotha.Kotha;
+import common.Kotha;
 
 public class Server {
 
