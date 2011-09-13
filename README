@@ -1,4 +1,4 @@
-Kotha solves the problem of designing strongly typed APIs over the web in Java. Kotha in Bengali means "talk".
+Kotha solves the important problem of designing strongly typed APIs over the web in Java. Kotha in Bengali means "talk".
 
 Problem description:
 You are writing your own server in Java that talks to a Java client. You want to provide some APIs that the clients can call on the server.
@@ -8,31 +8,32 @@ Current solutions:
 1) Use some API description language like WSDL - This works but not only you have to mess with XML files and learn a whole set of new tools and DSLs, the auto generated code looks ugly and generates tons of boiler plate codes and files. Also there is no easy way to talk to multiple different servers
 2) Use the Java RMI framework - This again works and guarantees type safety but you have to mess with rmiregistries and security settings and there is no easy way to connect to different servers or add new API methods
 3) Roll something of your own - This usually involves creating some kind function map from special opcodes sent over the wire to actual server side API implementations. This has the opposite problem of the above - its much smaller and easier to maintain and no DSLs involved and you can handle multiple servers but its very hard to do type checking or add new API methods
+4) Use KryoNet's ObjectSpace RMI library - This is probably the best current solution out there but you still have to write Client side boiler plate code to register your messages
 
 My solution:
-There is only a single 300-line Java code file that does all the work (Kotha.java) that you must read.
+There is only a single 250-line Java code file that does all the work (Kotha.java) that you must read.
 In short I use Guice to inject a dynamically created client-side API stub using Javassist that talks to the server using the KryoNet library and the server uses reflection to figure out which method to call. Neat huh?
 
 Usage:
 Here are the steps to add a new API method of your own. Let's say you want to add a new API "boolean isEven(int x)" which returns true iff x is even:
-1) Add the "Future<Boolean> isEven(int)" to the API.java interface file in Common module
+1) Add the "Future<Boolean> isEven(Integer)" to the API.java interface file in Common module
 2) Implement it in the API_Implementation in Server module
 3) There is no step 3! You are done and you can make a strongly typed API call over the network from the Client.java to Server.java now!
 
 Simplicity:
 The source code here provides an example usage of Kotha. To test it yourself, run Server.java and then run Client.java
-Kotha.java itself has only 5 public methods that you can call:
+Kotha.java itself has only 4 public methods that you can call:
 1) Call Kotha.startServer when you start the Server
 2) Call Kotha.connectToServer when you start the Client
-3) There are three utility methods Kotha.createFuture, Koth.makeServerCall and Kotha.getValueFromFuture that makes Future handling slightly easier
-
+3) There are 2 utility methods Kotha.createFuture and Kotha.getValueFromFuture that makes Future handling slightly easier
 
 TODO:
 1) Server monitoring framework
 2) One Client can talk to multiple servers
 3) Perf testing framework
 4) More Kryo serializers: https://github.com/magro/kryo-serializers
-5) More examples
+5) Remove warnings
 6) Guice??
 7) log4j
 8) Serialize arrays in RMI
+9) Hide Kotha.makeServerCall

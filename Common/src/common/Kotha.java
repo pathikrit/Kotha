@@ -18,7 +18,6 @@ import javassist.CtConstructor;
 import javassist.CtField;
 import javassist.CtMethod;
 
-import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -30,7 +29,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class Kotha {
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public final class Kotha {
+
+    private final static Logger log = LoggerFactory.getLogger(Kotha.class);
 
     private final static int CONNECTION_TIMEOUT_MS = 5 * 1000;
     private final static int MAX_SERVER_THREADS = 20;
@@ -66,9 +70,9 @@ public class Kotha {
                 apiStub.addMethod(remoteMethod);
             }
 
-            ret = apiStub.toClass().getConstructor(Client.class);
+            ret = ((Class<API>) apiStub.toClass()).getConstructor(Client.class);
         } catch (Throwable t) {
-            t.printStackTrace();
+            log.error("Could not generate Client API stub", t);
             System.exit(-1);
             ret = null;
         }
@@ -79,58 +83,60 @@ public class Kotha {
     }
 
     public static void startServer(int tcpPort, int udpPort, final API apiImpl) {
-        final Executor executor = Executors.newFixedThreadPool(MAX_SERVER_THREADS);
-        Server server = new Server();
-        setup(server, new Listener() {
-            @Override
-            public void received(final Connection connection, final Object message) {
-                if (message instanceof RMIMessage) {
-                    executor.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            connection.sendTCP(((RMIMessage) message).invokeOn(apiImpl));
-                        }
-                    });
-                }
-            }
-        });
-
         try {
+            final Executor executor = Executors.newFixedThreadPool(MAX_SERVER_THREADS);
+            Server server = new Server();
+            setup(server, new Listener() {
+                @Override
+                public void received(final Connection connection, final Object message) {
+                    if (message instanceof RMIMessage) {
+                        executor.execute(new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    connection.sendTCP(((RMIMessage) message).invokeOn(apiImpl));
+                                } catch (Throwable t) {
+                                    log.error("Error in server api call", t);
+                                }
+                            }
+                        });
+                    }
+                }
+            });
             server.bind(tcpPort, udpPort);
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (Throwable t) {
+            log.error("Could not start server", t);
             System.exit(-1);
         }
     }
 
     public static API connectToServer(String host, int tcpPort, int udpPort) {
-        final Client client = new Client();
-        setup(client, new Listener() {
-            @Override
-            public void connected(Connection connection) {
-                connections.put(client, connection);
-            }
-
-            @Override
-            public void disconnected(Connection connection) {
-                connections.remove(client);
-            }
-
-            @Override
-            public void received(Connection connection, Object message) {
-                if (message instanceof RMIMessage) {
-                    RMIMessage RMIMessage = (RMIMessage) message;
-                    apiCalls.remove(RMIMessage.ID).set(RMIMessage.args.get(0));
-                }
-            }
-
-        });
-
         try {
+            final Client client = new Client();
+            setup(client, new Listener() {
+                @Override
+                public void connected(Connection connection) {
+                    connections.put(client, connection);
+                }
+
+                @Override
+                public void disconnected(Connection connection) {
+                    connections.remove(client);
+                }
+
+                @Override
+                public void received(Connection connection, Object message) {
+                    if (message instanceof RMIMessage) {
+                        RMIMessage RMIMessage = (RMIMessage) message;
+                        apiCalls.remove(RMIMessage.id).set(RMIMessage.args.get(0));
+                    }
+                }
+            });
+
             client.connect(CONNECTION_TIMEOUT_MS, host, tcpPort, udpPort);
             return constructor.newInstance(client);
         } catch (Throwable t) {
-            t.printStackTrace();
+            log.error("Could not start client", t);
             System.exit(-1);
             return null;
         }
@@ -146,17 +152,17 @@ public class Kotha {
         try {
             return future.get();
         } catch (Throwable t) {
-            t.printStackTrace();
+            log.error("Could not get value from future", t);
             return null;
         }
     }
 
     public static Future<Object> makeServerCall(Client client, String methodName, Object... args) {
-        long id = CLIENT_REQUESTS.incrementAndGet();
-        SettableFuture<Object> f = SettableFuture.create();
-        apiCalls.put(id, f);
+        final long id = CLIENT_REQUESTS.incrementAndGet();
+        SettableFuture<Object> future = SettableFuture.create();
+        apiCalls.put(id, future);
         connections.get(client).sendTCP(new RMIMessage(id, methodName, Lists.newArrayList(args)));
-        return f;
+        return future;
     }
 
     private static void setup(EndPoint endPoint, Listener listener) {
@@ -170,24 +176,25 @@ public class Kotha {
 
 class RMIMessage {
 
-    final long ID;
+    final long id;
     final String methodName;
     final List<?> args;
 
-    static final Map<String, Method> methodCache = Maps.newHashMap();
+    final static transient Logger log = LoggerFactory.getLogger(RMIMessage.class);
+    final static transient Map<String, Method> methodCache = Maps.newHashMap();
 
     RMIMessage() {
         this(0, null, null);
     }
 
-    RMIMessage(long ID, String methodName, List<?> args) {
-        this.ID = ID;
+    RMIMessage(long id, String methodName, List<?> args) {
+        this.id = id;
         this.methodName = methodName;
         this.args = args;
     }
 
     RMIMessage invokeOn(API api) {
-        return new RMIMessage(ID, methodName, Lists.newArrayList(call(api, args.toArray())));
+        return new RMIMessage(id, methodName, Lists.newArrayList(call(api, args.toArray())));
     }
 
     Object call(API api, Object... args) {
@@ -218,9 +225,9 @@ class RMIMessage {
         }
 
         try {
-            return Kotha.getValueFromFuture((Future<Object>) method.invoke(api, args));
+            return Kotha.getValueFromFuture((Future<?>) method.invoke(api, args));
         } catch (Throwable t) {
-            t.printStackTrace();
+            log.error("Could not invoke " + methodName, t);
             return null;
         }
     }

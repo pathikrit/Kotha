@@ -10,13 +10,16 @@ public class Client {
     public static void main(String[] args) {
         API api = Kotha.connectToServer("localhost", 54555, 54777);
 
-        Future<String> res = api.appendHello("world");
+        testApiCall(api.join("hello", "world"));
+        testApiCall(api.appendZero(23));
+        testApiCall(api.getPi());
+        testApiCall(api.printOnServerConsole("howdy"));
+    }
 
-        while (!res.isDone()) {
-            System.out.println("not done yet!");
+    private static void testApiCall(Future<?> f) {
+        while (!f.isDone()) {
+            System.out.print('.');
         }
-
-        System.out.println(Kotha.getValueFromFuture(res));
-
+        System.out.println(Kotha.getValueFromFuture(f));
     }
 }
