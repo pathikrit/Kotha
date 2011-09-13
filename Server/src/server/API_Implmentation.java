@@ -14,7 +14,7 @@ public class API_Implmentation implements API {
     }
 
     @Override
-    public Future<Integer> appendZero(int i) {
+    public Future<Integer> appendZero(Integer i) {
         int ret = i * 10;
         return Kotha.createFuture(ret);
     }

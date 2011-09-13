@@ -1,14 +1,25 @@
 package common;
 
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryonet.*;
+import com.esotericsoftware.kryonet.Client;
+import com.esotericsoftware.kryonet.Connection;
+import com.esotericsoftware.kryonet.EndPoint;
+import com.esotericsoftware.kryonet.Listener;
+import com.esotericsoftware.kryonet.Server;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.primitives.Primitives;
 import com.google.common.util.concurrent.SettableFuture;
-import javassist.*;
+
+import javassist.ClassPool;
+import javassist.CtClass;
+import javassist.CtConstructor;
+import javassist.CtField;
+import javassist.CtMethod;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -28,7 +39,41 @@ public class Kotha {
 
     private final static Map<Client, Connection> connections = Maps.newHashMap();
     private final static Map<Long, SettableFuture<Object>> apiCalls = Maps.newConcurrentMap();
-    // private final static Map<Client, CtClass> connections = Maps.newHashMap();
+
+    private final static Constructor<API> constructor;
+
+    static {
+        Constructor<API> ret;
+        try {
+            final String apiPkg = "common.API", clientPkg = "com.esotericsoftware.kryonet.Client";
+            ClassPool classPool = ClassPool.getDefault();
+            classPool.importPackage(apiPkg);
+            classPool.importPackage(clientPkg);
+            classPool.importPackage("common.Kotha");
+
+            CtClass apiInterface = classPool.get(apiPkg);
+            CtClass apiStub = classPool.makeClass("RemoteCaller");
+            apiStub.addInterface(apiInterface);
+            apiStub.addField(CtField.make("private final Client client;", apiStub));
+
+            CtConstructor ctConstructor = new CtConstructor(new CtClass[]{classPool.get(clientPkg)}, apiStub);
+            ctConstructor.setBody("{ this.client = $1; }");
+            apiStub.addConstructor(ctConstructor);
+
+            for (CtMethod i : apiInterface.getDeclaredMethods()) {
+                CtMethod remoteMethod = new CtMethod(i.getReturnType(), i.getName(), i.getParameterTypes(), apiStub);
+                remoteMethod.setBody("{ return Kotha.makeServerCall(client, \"" + i.getName() + "\", $args); }");
+                apiStub.addMethod(remoteMethod);
+            }
+
+            ret = apiStub.toClass().getConstructor(Client.class);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            System.exit(-1);
+            ret = null;
+        }
+        constructor = ret;
+    }
 
     private Kotha() {
     }
@@ -83,13 +128,12 @@ public class Kotha {
 
         try {
             client.connect(CONNECTION_TIMEOUT_MS, host, tcpPort, udpPort);
+            return constructor.newInstance(client);
         } catch (Throwable t) {
             t.printStackTrace();
             System.exit(-1);
             return null;
         }
-
-        return getApiStubForClient(client);
     }
 
     public static <T> Future<T> createFuture(T result) {
@@ -107,54 +151,20 @@ public class Kotha {
         }
     }
 
+    public static Future<Object> makeServerCall(Client client, String methodName, Object... args) {
+        long id = CLIENT_REQUESTS.incrementAndGet();
+        SettableFuture<Object> f = SettableFuture.create();
+        apiCalls.put(id, f);
+        connections.get(client).sendTCP(new RMIMessage(id, methodName, Lists.newArrayList(args)));
+        return f;
+    }
+
     private static void setup(EndPoint endPoint, Listener listener) {
         Kryo kryo = endPoint.getKryo();
         kryo.register(RMIMessage.class);
         kryo.register(ArrayList.class);
         endPoint.addListener(listener);
         endPoint.start();
-    }
-
-    static Future<?> makeServerCall(Client client, String methodName, Object... args) {
-        long id = CLIENT_REQUESTS.incrementAndGet();
-        Future<?> f = SettableFuture.create();
-        apiCalls.put(id, (SettableFuture<Object>) f);
-        connections.get(client).sendTCP(new RMIMessage(id, methodName, Lists.newArrayList(args)));
-        return f;
-    }
-
-    private static API getApiStubForClient(Client client) {
-        try {
-            ClassPool classPool = ClassPool.getDefault();
-            classPool.importPackage("common.API");
-            classPool.importPackage("com.esotericsoftware.kryonet.Client");
-            classPool.importPackage("common.Kotha");
-
-            CtClass apiInterface = classPool.get("common.API");
-            CtClass apiStub = classPool.makeClass("RemoteCaller", apiInterface);
-            apiStub.addField(CtField.make("private Client client;", apiStub));
-
-            CtConstructor ctConstructor = new CtConstructor(new CtClass[]{classPool.get("com.esotericsoftware.kryonet.Client")}, apiStub);
-            ctConstructor.setBody("{ this.client = $1; }");
-            apiStub.addConstructor(ctConstructor);
-
-            for (CtMethod i : apiInterface.getDeclaredMethods()) {
-                CtMethod remoteMethod = new CtMethod(i.getReturnType(), i.getName(), i.getParameterTypes(), apiStub);
-                remoteMethod.setBody("{ return Kotha.makeServerCall(client, \"" + i.getName() + "\", null); }");
-                remoteMethod.setModifiers(Modifier.PUBLIC);
-
-                apiStub.addMethod(remoteMethod);
-
-            }
-            apiStub.setModifiers(Modifier.PUBLIC);
-            apiStub.debugWriteFile("/Users/pathikritbhowmick/Desktop/");
-            return (API) (apiStub.toClass().getConstructor(Client.class).newInstance(client));
-        } catch (Throwable t) {
-            t.printStackTrace();
-            System.exit(-1);
-            return null;
-
-        }
     }
 }
 
@@ -176,12 +186,11 @@ class RMIMessage {
         this.args = args;
     }
 
-    common.RMIMessage invokeOn(API api) {
-        Object result = Kotha.getValueFromFuture((Future) call(api, methodName, args.toArray()));
-        return new common.RMIMessage(ID, methodName, Lists.newArrayList(result));
+    RMIMessage invokeOn(API api) {
+        return new RMIMessage(ID, methodName, Lists.newArrayList(call(api, args.toArray())));
     }
 
-    static Object call(API api, String methodName, Object... args) {
+    Object call(API api, Object... args) {
         Class<?>[] paramTypes = new Class[args.length];
         for (int i = 0; i < args.length; i++) {
             paramTypes[i] = args[i] == null ? null : args[i].getClass();
@@ -209,7 +218,7 @@ class RMIMessage {
         }
 
         try {
-            return method.invoke(api, args);
+            return Kotha.getValueFromFuture((Future<Object>) method.invoke(api, args));
         } catch (Throwable t) {
             t.printStackTrace();
             return null;

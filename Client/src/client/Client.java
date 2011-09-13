@@ -10,7 +10,7 @@ public class Client {
     public static void main(String[] args) {
         API api = Kotha.connectToServer("localhost", 54555, 54777);
 
-        Future<String> res = api.appendHello("g");
+        Future<String> res = api.appendHello("world");
 
         while (!res.isDone()) {
             System.out.println("not done yet!");

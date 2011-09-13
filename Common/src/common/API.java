@@ -6,5 +6,5 @@ public interface API {
 
     public Future<String> appendHello(String s);
 
-    public Future<Integer> appendZero(int i);
+    public Future<Integer> appendZero(Integer i);
 }

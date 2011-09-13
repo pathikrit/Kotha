@@ -21,17 +21,18 @@ Here are the steps to add a new API method of your own. Let's say you want to ad
 
 Simplicity:
 The source code here provides an example usage of Kotha. To test it yourself, run Server.java and then run Client.java
-Kotha.java itself has only 4 public methods that you can call:
+Kotha.java itself has only 5 public methods that you can call:
 1) Call Kotha.startServer when you start the Server
 2) Call Kotha.connectToServer when you start the Client
-3) There are two utility methods Kotha.createFuture and Kotha.getValueFromFuture that makes Future handling slightly easier.
+3) There are three utility methods Kotha.createFuture, Koth.makeServerCall and Kotha.getValueFromFuture that makes Future handling slightly easier
+
 
 TODO:
 1) Server monitoring framework
 2) One Client can talk to multiple servers
 3) Perf testing framework
 4) More Kryo serializers: https://github.com/magro/kryo-serializers
-5) Fix multi-client race condition bug
-6) Write Javaassist code
-7) Stress test
-
+5) More examples
+6) Guice??
+7) log4j
+8) Serialize arrays in RMI
