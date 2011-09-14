@@ -1,7 +1,8 @@
 package server;
 
+import com.google.common.util.concurrent.Futures;
+
 import common.API;
-import common.Kotha;
 
 import java.util.concurrent.Future;
 
@@ -10,23 +11,23 @@ public class API_Implmentation implements API {
     @Override
     public Future<String> join(String a, String b) {
         String result = a + "-" + b;
-        return Kotha.createFuture(result);
+        return Futures.immediateFuture(result);
     }
 
     @Override
     public Future<Integer> appendZero(Integer i) {
         int ret = i * 10;
-        return Kotha.createFuture(ret);
+        return Futures.immediateFuture(ret);
     }
 
     @Override
     public Future<Double> getPi() {
-        return Kotha.createFuture(3.14);
+        return Futures.immediateFuture(3.14);
     }
 
     @Override
     public Future<Void> printOnServerConsole(String s) {
         System.out.println("Request to print: " + s);
-        return Kotha.createFuture(null);
+        return Futures.immediateFuture(null);
     }
 }

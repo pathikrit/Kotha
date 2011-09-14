@@ -1,5 +1,7 @@
 package client;
 
+import com.google.common.util.concurrent.Futures;
+
 import common.API;
 import common.Kotha;
 
@@ -8,7 +10,7 @@ import java.util.concurrent.Future;
 public class Client {
 
     public static void main(String[] args) {
-        API api = Kotha.connectToServer("localhost", 54555, 54777);
+        API api = Kotha.connectToServer("localhost:54555");
 
         testApiCall(api.join("hello", "world"));
         testApiCall(api.appendZero(23));
@@ -20,6 +22,6 @@ public class Client {
         while (!f.isDone()) {
             System.out.print('.');
         }
-        System.out.println(Kotha.getValueFromFuture(f));
+        System.out.println(Futures.getUnchecked(f));
     }
 }

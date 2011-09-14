@@ -11,23 +11,19 @@ Current solutions:
 4) Use KryoNet's ObjectSpace RMI library - This is probably the best current solution out there but you still have to write Client side boiler plate code to register your messages
 
 My solution:
-There is only a single 250-line Java code file that does all the work (Kotha.java) that you must read.
-In short I use Guice to inject a dynamically created client-side API stub using Javassist that talks to the server using the KryoNet library and the server uses reflection to figure out which method to call. Neat huh?
-
-Usage:
-Here are the steps to add a new API method of your own. Let's say you want to add a new API "boolean isEven(int x)" which returns true iff x is even:
+Here are the steps to add a new API method of your own using the Kotha framework. Let's say you want to add a new API "boolean isEven(int x)" which returns true iff x is even:
 1) Add the "Future<Boolean> isEven(Integer)" to the API.java interface file in Common module
 2) Implement it in the API_Implementation in Server module
 3) There is no step 3! You are done and you can make a strongly typed API call over the network from the Client.java to Server.java now!
 
 Simplicity:
-The source code here provides an example usage of Kotha. To test it yourself, run Server.java and then run Client.java
-Kotha.java itself has only 4 public methods that you can call:
+The source code here provides an example usage of Kotha. To test it yourself, run Server.java and then run Client.java.
+There is only a single 200-line Java code file that does all the work (Kotha.java) that you must read.
+Kotha.java itself has only 2 public methods that you call:
 1) Call Kotha.startServer when you start the Server
 2) Call Kotha.connectToServer when you start the Client
-3) There are 2 utility methods Kotha.createFuture and Kotha.getValueFromFuture that makes Future handling slightly easier
 
 TODO:
-1) Server monitoring & Perf testing frameworks
+1) Stress testing frameworks
 2) One Client can talk to multiple servers
 3) Use Guice to bind APIs instead for Client?
