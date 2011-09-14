@@ -8,7 +8,6 @@ import com.esotericsoftware.kryonet.Listener;
 import com.esotericsoftware.kryonet.Server;
 
 import com.google.common.base.Stopwatch;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.net.HostAndPort;
 import com.google.common.primitives.Primitives;
@@ -18,14 +17,31 @@ import com.google.common.util.concurrent.SettableFuture;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
+import java.util.Collections;
+import java.util.Currency;
+import java.util.GregorianCalendar;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
+
+import de.javakaffee.kryoserializers.ArraysAsListSerializer;
+import de.javakaffee.kryoserializers.ClassSerializer;
+import de.javakaffee.kryoserializers.CollectionsEmptyListSerializer;
+import de.javakaffee.kryoserializers.CollectionsEmptyMapSerializer;
+import de.javakaffee.kryoserializers.CollectionsEmptySetSerializer;
+import de.javakaffee.kryoserializers.CollectionsSingletonListSerializer;
+import de.javakaffee.kryoserializers.CollectionsSingletonMapSerializer;
+import de.javakaffee.kryoserializers.CollectionsSingletonSetSerializer;
+import de.javakaffee.kryoserializers.CurrencySerializer;
+import de.javakaffee.kryoserializers.GregorianCalendarSerializer;
+import de.javakaffee.kryoserializers.JdkProxySerializer;
+import de.javakaffee.kryoserializers.StringBufferSerializer;
+import de.javakaffee.kryoserializers.StringBuilderSerializer;
+import de.javakaffee.kryoserializers.SynchronizedCollectionsSerializer;
+import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,7 +107,7 @@ public final class Kotha {
                 public void received(Connection connection, Object message) {
                     if (message instanceof RMIMessage) {
                         RMIMessage rmiMessage = (RMIMessage) message;
-                        apiCalls.remove(rmiMessage.id).set(rmiMessage.args.get(0));
+                        apiCalls.remove(rmiMessage.id).set(rmiMessage.args[0]);
                         log.info(rmiMessage.methodName + " call took " + timers.remove(rmiMessage.id).stop());
                     }
                 }
@@ -99,13 +115,13 @@ public final class Kotha {
 
             HostAndPort serverLocation = HostAndPort.fromString(address);
             client.connect(CONNECTION_TIMEOUT_MS, serverLocation.getHostText(), serverLocation.getPort());
-            return getInstance(client);
+            return getRemoteCaller(client);
         } catch (Throwable t) {
             return error("Could not start client", t);
         }
     }
 
-    static API getInstance(final Client client) {
+    private static API getRemoteCaller(final Client client) {
         return (API) Proxy.newProxyInstance(API.class.getClassLoader(), new Class[]{API.class}, new InvocationHandler() {
             @Override
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
@@ -114,19 +130,34 @@ public final class Kotha {
         });
     }
 
-    static Future<Object> makeServerCall(Connection wire, String methodName, Object... args) {
+    private static Future<Object> makeServerCall(Connection wire, String methodName, Object... args) {
         final long id = CLIENT_REQUESTS.incrementAndGet();
         timers.put(id, new Stopwatch().start());
         SettableFuture<Object> future = SettableFuture.create();
         apiCalls.put(id, future);
-        wire.sendTCP(new RMIMessage(id, methodName, Lists.newArrayList(args)));
+        wire.sendTCP(new RMIMessage(id, methodName, args));
         return future;
     }
 
     private static void setup(EndPoint endPoint, Listener listener) {
         Kryo kryo = endPoint.getKryo();
         kryo.register(RMIMessage.class);
-        kryo.register(ArrayList.class); // TODO: More Kryo serializers: https://github.com/magro/kryo-serializers
+        kryo.register(Object[].class);
+        kryo.register(Arrays.asList("").getClass(), new ArraysAsListSerializer(kryo));
+        kryo.register(Class.class, new ClassSerializer(kryo));
+        kryo.register(Collections.EMPTY_LIST.getClass(), new CollectionsEmptyListSerializer());
+        kryo.register(Collections.EMPTY_MAP.getClass(), new CollectionsEmptyMapSerializer());
+        kryo.register(Collections.EMPTY_SET.getClass(), new CollectionsEmptySetSerializer());
+        kryo.register(Collections.singletonList("").getClass(), new CollectionsSingletonListSerializer(kryo));
+        kryo.register(Collections.singleton("").getClass(), new CollectionsSingletonSetSerializer(kryo));
+        kryo.register(Collections.singletonMap("", "").getClass(), new CollectionsSingletonMapSerializer(kryo));
+        kryo.register(Currency.class, new CurrencySerializer(kryo));
+        kryo.register(GregorianCalendar.class, new GregorianCalendarSerializer());
+        kryo.register(InvocationHandler.class, new JdkProxySerializer(kryo));
+        kryo.register(StringBuffer.class, new StringBufferSerializer(kryo));
+        kryo.register(StringBuilder.class, new StringBuilderSerializer(kryo));
+        UnmodifiableCollectionsSerializer.registerSerializers(kryo);
+        SynchronizedCollectionsSerializer.registerSerializers(kryo);
         endPoint.addListener(listener);
         endPoint.start();
     }
@@ -141,26 +172,24 @@ class RMIMessage {
 
     final long id;
     final String methodName;
-    final List<?> args; // TODO: just use Object array?
+    final Object[] args;
 
     final static transient Map<String, Method> methodCache = Maps.newHashMap();
 
     RMIMessage() {
-        this(0, null, null);
+        this(0, null);
     }
 
-    RMIMessage(long id, String methodName, List<?> args) {
+    RMIMessage(long id, String methodName, Object... args) {
         this.id = id;
         this.methodName = methodName;
         this.args = args;
     }
 
     RMIMessage invokeOn(API api) {
-        Object[] argsArr = args.toArray();
-
-        Class<?>[] paramTypes = new Class[argsArr.length];
-        for (int i = 0; i < argsArr.length; i++) {
-            paramTypes[i] = argsArr[i] == null ? null : argsArr[i].getClass();
+        Class<?>[] paramTypes = new Class[args.length];
+        for (int i = 0; i < args.length; i++) {
+            paramTypes[i] = args[i] == null ? null : args[i].getClass();
         }
 
         final Class<? extends API> apiClass = api.getClass();
@@ -184,11 +213,14 @@ class RMIMessage {
             methodCache.put(key, method);
         }
 
+        Future<?> f;
         try {
-            return new RMIMessage(id, methodName, Lists.newArrayList(Futures.getUnchecked((Future<?>) method.invoke(api, argsArr))));
+            f = (Future<?>) method.invoke(api, args);
         } catch (Throwable t) {
-            return Kotha.error("Could not invoke " + methodName, t);
+            ((SettableFuture<?>) (f = SettableFuture.create())).setException(t);
         }
+
+        return new RMIMessage(id, methodName, Futures.getUnchecked(f));
     }
 
     static boolean areParamsExtendable(Class<?>[] classes, Class<?>[] superClasses) {

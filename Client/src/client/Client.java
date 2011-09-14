@@ -20,8 +20,8 @@ public class Client {
 
     private static void testApiCall(Future<?> f) {
         while (!f.isDone()) {
-            System.out.print('.');
+            //System.out.println('.');
         }
-        System.out.println(Futures.getUnchecked(f));
+        System.out.println("Got result from server: " + Futures.getUnchecked(f));
     }
 }
