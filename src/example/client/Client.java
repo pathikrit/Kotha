@@ -10,7 +10,7 @@ import java.util.concurrent.Future;
 public class Client {
 
     public static void main(String[] args) {
-        API api = Kotha.connectToServer("localhost:54555", API.class);
+        API api = Kotha.connectToServer(API.class, "localhost:54555");
 
         testApiCall(api.join("hello", "world"));
         testApiCall(api.appendZero(23));
