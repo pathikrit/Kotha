@@ -2,7 +2,7 @@ package example.server;
 
 import com.google.common.util.concurrent.Futures;
 
-import common.API;
+import example.common.API;
 
 import java.util.concurrent.Future;
 

@@ -2,7 +2,7 @@ package example.client;
 
 import com.google.common.util.concurrent.Futures;
 
-import common.API;
+import example.common.API;
 import common.Kotha;
 
 import java.util.concurrent.Future;
@@ -10,7 +10,7 @@ import java.util.concurrent.Future;
 public class Client {
 
     public static void main(String[] args) {
-        API api = Kotha.connectToServer("localhost:54555");
+        API api = Kotha.connectToServer("localhost:54555", API.class);
 
         testApiCall(api.join("hello", "world"));
         testApiCall(api.appendZero(23));

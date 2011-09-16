@@ -62,7 +62,7 @@ public final class Kotha {
     private Kotha() {
     }
 
-    public static void startServer(int tcpPort, final API apiImpl) {
+    public static void startServer(int tcpPort, final Object apiImpl) {
         try {
             final Executor executor = Executors.newFixedThreadPool(MAX_SERVER_THREADS);
             Server server = new Server();
@@ -89,7 +89,7 @@ public final class Kotha {
         }
     }
 
-    public static API connectToServer(String address) {
+    public static <T> T connectToServer(String address, Class<T> apiClass) {
         try {
             final Client client = new Client();
             setup(client, new Listener() {
@@ -115,14 +115,15 @@ public final class Kotha {
 
             HostAndPort serverLocation = HostAndPort.fromString(address);
             client.connect(CONNECTION_TIMEOUT_MS, serverLocation.getHostText(), serverLocation.getPort());
-            return getRemoteCaller(client);
+            return getRemoteCaller(client, apiClass);
         } catch (Throwable t) {
             return error("Could not start client", t);
         }
     }
 
-    private static API getRemoteCaller(final Client client) {
-        return (API) Proxy.newProxyInstance(API.class.getClassLoader(), new Class[]{API.class}, new InvocationHandler() {
+    @SuppressWarnings("unchecked")
+    private static <T> T getRemoteCaller(final Client client, final Class<T> apiClass) {
+        return (T) Proxy.newProxyInstance(apiClass.getClassLoader(), new Class[]{apiClass}, new InvocationHandler() {
             @Override
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
                 return makeServerCall(connections.get(client), method.getName(), args == null ? new Object[0] : args);
@@ -162,7 +163,7 @@ public final class Kotha {
         endPoint.start();
     }
 
-    static <T> T error(String message, Throwable cause) {
+    private static <T> T error(String message, Throwable cause) {
         log.error(message, cause);
         return null;
     }
@@ -186,13 +187,13 @@ class RMIMessage {
         this.args = args;
     }
 
-    RMIMessage invokeOn(API api) {
+    RMIMessage invokeOn(Object api) {
         Class<?>[] paramTypes = new Class[args.length];
         for (int i = 0; i < args.length; i++) {
             paramTypes[i] = args[i] == null ? null : args[i].getClass();
         }
 
-        final Class<? extends API> apiClass = api.getClass();
+        final Class<?> apiClass = api.getClass();
         final String key = apiClass.getName() + methodName + Arrays.toString(paramTypes);
 
         Method method = methodCache.get(key);
