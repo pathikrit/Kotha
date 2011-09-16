@@ -1,4 +1,4 @@
-package common;
+package kotha;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryonet.Client;

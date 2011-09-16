@@ -3,7 +3,7 @@ package example.client;
 import com.google.common.util.concurrent.Futures;
 
 import example.common.API;
-import common.Kotha;
+import kotha.Kotha;
 
 import java.util.concurrent.Future;
 

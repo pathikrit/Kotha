@@ -1,6 +1,6 @@
 package example.server;
 
-import common.Kotha;
+import kotha.Kotha;
 
 public class Server {
 
