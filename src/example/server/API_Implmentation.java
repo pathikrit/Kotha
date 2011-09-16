@@ -1,4 +1,4 @@
-package server;
+package example.server;
 
 import com.google.common.util.concurrent.Futures;
 

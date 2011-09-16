@@ -1,4 +1,4 @@
-package client;
+package example.client;
 
 import com.google.common.util.concurrent.Futures;
 
