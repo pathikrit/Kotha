@@ -6,14 +6,15 @@ import com.esotericsoftware.kryonet.Connection;
 import com.esotericsoftware.kryonet.EndPoint;
 import com.esotericsoftware.kryonet.Listener;
 import com.esotericsoftware.kryonet.Server;
-
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.google.common.net.HostAndPort;
 import com.google.common.primitives.Primitives;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.SettableFuture;
-
 import de.javakaffee.kryoserializers.ArraysAsListSerializer;
 import de.javakaffee.kryoserializers.ClassSerializer;
 import de.javakaffee.kryoserializers.CollectionsEmptyListSerializer;
@@ -29,17 +30,19 @@ import de.javakaffee.kryoserializers.StringBufferSerializer;
 import de.javakaffee.kryoserializers.StringBuilderSerializer;
 import de.javakaffee.kryoserializers.SynchronizedCollectionsSerializer;
 import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Currency;
 import java.util.GregorianCalendar;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -55,20 +58,23 @@ public final class Kotha {
 
     private final static AtomicLong CLIENT_REQUESTS = new AtomicLong();
 
-    private final static Map<Client, Connection> connections = Maps.newHashMap();
+    private final static Multimap<Client, Connection> connections = HashMultimap.create();
     private final static Map<Long, SettableFuture<Object>> apiCalls = Maps.newConcurrentMap();
     private final static Map<Long, Stopwatch> timers = Maps.newConcurrentMap();
+    private final static HashMap<String, Connection> serviceLookup = Maps.newHashMap();
+    private final static Map<Method, String> methodSignatureCache = Maps.newHashMap();
 
     private Kotha() {
     }
 
-    public static void startServer(int tcpPort, final Object apiImpl) {
+    public static void startServer(int tcpPort, final Class<?> apiImpl) {
         try {
             final Executor executor = Executors.newFixedThreadPool(MAX_SERVER_THREADS);
             Server server = new Server();
             setup(server, new Listener() {
                 @Override
                 public void received(final Connection connection, final Object message) {
+                    super.received(connection, message);
                     if (message instanceof RMIMessage) {
                         executor.execute(new Runnable() {
                             @Override
@@ -82,6 +88,16 @@ public final class Kotha {
                         });
                     }
                 }
+
+                @Override
+                public void connected(Connection connection) {
+                    super.connected(connection);
+                    List<String> services = Lists.newArrayList();
+                    for (Method m : apiImpl.getDeclaredMethods()) {
+                        services.add(getMethodSignature(m));
+                    }
+                    connection.sendTCP(services);
+                }
             });
             server.bind(tcpPort);
         } catch (Throwable t) {
@@ -89,32 +105,52 @@ public final class Kotha {
         }
     }
 
-    public static <T> T connectToServer(String address, Class<T> apiClass) {
+    public static <T> T connectToServer(Class<T> apiClass, String address, String... addresses) {
         try {
+            List<String> servers = Lists.newArrayList(address);
+            if (addresses != null) {
+                Collections.addAll(servers, addresses);
+            }
+
             final Client client = new Client();
-            setup(client, new Listener() {
-                @Override
-                public void connected(Connection connection) {
-                    connections.put(client, connection);
-                }
 
-                @Override
-                public void disconnected(Connection connection) {
-                    connections.remove(client);
-                }
-
-                @Override
-                public void received(Connection connection, Object message) {
-                    if (message instanceof RMIMessage) {
-                        RMIMessage rmiMessage = (RMIMessage) message;
-                        apiCalls.remove(rmiMessage.id).set(rmiMessage.args[0]);
-                        log.info(rmiMessage.methodName + " call took " + timers.remove(rmiMessage.id).stop());
+            for (String server : servers) {
+                setup(client, new Listener() {
+                    @Override
+                    public void connected(Connection connection) {
+                        super.connected(connection);
+                        connections.put(client, connection);
                     }
-                }
-            });
 
-            HostAndPort serverLocation = HostAndPort.fromString(address);
-            client.connect(CONNECTION_TIMEOUT_MS, serverLocation.getHostText(), serverLocation.getPort());
+                    @Override
+                    public void disconnected(Connection connection) {
+                        super.disconnected(connection);
+                        connections.get(client).remove(connection);
+                    }
+
+                    @Override
+                    public void received(Connection connection, Object message) {
+                        super.received(connection, message);
+                        if (message instanceof RMIMessage) {
+                            RMIMessage rmiMessage = (RMIMessage) message;
+                            apiCalls.remove(rmiMessage.id).set(rmiMessage.args[0]);
+                            log.info(rmiMessage.methodName + " call took " + timers.remove(rmiMessage.id).stop());
+                        } else if (message instanceof List) {
+                            for (String method : (List<String>) message) {
+                                serviceLookup.put(method, connection);
+                            }
+                        }
+                    }
+                });
+
+                HostAndPort serverLocation = HostAndPort.fromString(server);
+                try {
+                    client.connect(CONNECTION_TIMEOUT_MS, serverLocation.getHostText(), serverLocation.getPort());
+                } catch (Throwable t) {
+                    error("Could not connect to " + server, t);
+                }
+            }
+
             return getRemoteCaller(client, apiClass);
         } catch (Throwable t) {
             return error("Could not start client", t);
@@ -126,7 +162,13 @@ public final class Kotha {
         return (T) Proxy.newProxyInstance(apiClass.getClassLoader(), new Class[]{apiClass}, new InvocationHandler() {
             @Override
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-                return makeServerCall(connections.get(client), method.getName(), args == null ? new Object[0] : args);
+                final String methodSignature = getMethodSignature(method);
+                final Connection connection = serviceLookup.get(methodSignature);
+                if (connection == null || !connections.get(client).contains(connection)) {
+                    log.error("Could not find server implementing " + methodSignature);
+                    return null;
+                }
+                return makeServerCall(connection, method.getName(), args == null ? new Object[0] : args);
             }
         });
     }
@@ -143,6 +185,7 @@ public final class Kotha {
     private static void setup(EndPoint endPoint, Listener listener) {
         Kryo kryo = endPoint.getKryo();
         kryo.register(RMIMessage.class);
+        kryo.register(ArrayList.class);
         kryo.register(Object[].class);
         kryo.register(Arrays.asList("").getClass(), new ArraysAsListSerializer(kryo));
         kryo.register(Class.class, new ClassSerializer(kryo));
@@ -167,6 +210,18 @@ public final class Kotha {
         log.error(message, cause);
         return null;
     }
+
+    private static String getMethodSignature(Method m) {
+        String signature = methodSignatureCache.get(m);
+        if (signature == null) {
+            signature = m.getName() + "(";
+            for (Class p : m.getParameterTypes()) {
+                signature += p.getName() + ",";
+            }
+            methodSignatureCache.put(m, signature += ")");
+        }
+        return signature;
+    }
 }
 
 class RMIMessage {
@@ -187,13 +242,12 @@ class RMIMessage {
         this.args = args;
     }
 
-    RMIMessage invokeOn(Object api) {
+    RMIMessage invokeOn(Class<?> apiClass) {
         Class<?>[] paramTypes = new Class[args.length];
         for (int i = 0; i < args.length; i++) {
             paramTypes[i] = args[i] == null ? null : args[i].getClass();
         }
 
-        final Class<?> apiClass = api.getClass();
         final String key = apiClass.getName() + methodName + Arrays.toString(paramTypes);
 
         Method method = methodCache.get(key);
@@ -216,7 +270,7 @@ class RMIMessage {
 
         Future<?> f;
         try {
-            f = (Future<?>) method.invoke(api, args);
+            f = (Future<?>) method.invoke(apiClass.newInstance(), args);
         } catch (Throwable t) {
             ((SettableFuture<?>) (f = SettableFuture.create())).setException(t);
         }
