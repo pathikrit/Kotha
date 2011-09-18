@@ -27,7 +27,7 @@ import static kotha.Kotha.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class KothaClient {
+public class KothaClient<T> {
 
     private final static Logger log = LoggerFactory.getLogger(KothaClient.class);
 
@@ -42,14 +42,20 @@ public class KothaClient {
 
     private final static Map<String, Connection> serviceLocationCache = Maps.newHashMap();
 
-    public static <T> T connectToServers(Class<T> apiClass, final String address, final String... addresses) {
+    private final Class<T> apiClass;
+    private final long clientId;
+
+    public KothaClient(Class<T> apiClass) {
+        this.apiClass = apiClass;
+        this.clientId = CLIENTS.incrementAndGet();
+    }
+
+    public T connectTo(final String server1, final String... addresses) {
         try {
-            Set<String> connectTo = Sets.newHashSet(address);
+            Set<String> connectTo = Sets.newHashSet(server1);
             if (addresses != null) {
                 Collections.addAll(connectTo, addresses);
             }
-
-            final long clientId = CLIENTS.incrementAndGet();
 
             for (String server : connectTo) {
                 final Client client = new Client();
@@ -93,14 +99,14 @@ public class KothaClient {
                 }
             }
 
-            return getRemoteCaller(clientId, apiClass);
+            return getRemoteCaller();
         } catch (Throwable t) {
             return error(log, "Could not start client", t);
         }
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> T getRemoteCaller(final Long clientId, final Class<T> apiClass) {
+    private T getRemoteCaller() {
         return (T) Proxy.newProxyInstance(apiClass.getClassLoader(), new Class[]{apiClass}, new InvocationHandler() {
             @Override
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {

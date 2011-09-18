@@ -5,7 +5,7 @@ import kotha.KothaServer;
 public class Server1 {
 
     public static void main(String[] args) {
-        KothaServer.startServer(54555, APIImpl1.class);
+        new KothaServer<APIImpl1>(APIImpl1.class).start(54555);
     }
 
 }

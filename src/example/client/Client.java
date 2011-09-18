@@ -8,7 +8,7 @@ import kotha.KothaClient;
 public class Client {
 
     public static void main(String[] args) {
-        API api = KothaClient.connectToServers(API.class, "localhost:54555", "localhost:54556");
+        API api = new KothaClient<API>(API.class).connectTo("localhost:54555", "localhost:54556");
 
         testApiCall(api.join("hello", "world"));
         testApiCall(api.appendZero(23));

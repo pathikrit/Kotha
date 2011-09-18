@@ -28,7 +28,7 @@ import static kotha.Kotha.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class KothaServer {
+public class KothaServer<T> {
 
     private final static Logger log = LoggerFactory.getLogger(KothaServer.class);
     private final static Map<String, Method> methodCache = Maps.newHashMap();
@@ -40,7 +40,13 @@ public class KothaServer {
 
     private final static int MAX_SERVER_THREADS = 20;
 
-    public static void startServer(int tcpPort, final Class<?> apiImpl) {
+    private final Class<T> apiImpl;
+
+    public KothaServer(Class<T> apiImpl) {
+        this.apiImpl = apiImpl;
+    }
+
+    public void start(final int tcpPort) {
         try {
             final Executor executor = Executors.newFixedThreadPool(MAX_SERVER_THREADS);
             Server server = new Server();
@@ -53,7 +59,7 @@ public class KothaServer {
                             @Override
                             public void run() {
                                 try {
-                                    connection.sendTCP(invoke(apiImpl, (RMIMessage) message));
+                                    connection.sendTCP(execute((RMIMessage) message));
                                 } catch (Throwable t) {
                                     error(log, "Error in server api call", t);
                                 }
@@ -82,7 +88,7 @@ public class KothaServer {
         }
     }
 
-    private static RMIMessage invoke(Class<?> apiClass, RMIMessage message) {
+    private RMIMessage execute(RMIMessage message) {
         final long id = message.id;
         final String methodName = message.methodName;
         final Object[] args = message.args;
@@ -92,15 +98,15 @@ public class KothaServer {
             paramTypes[i] = args[i] == null ? null : args[i].getClass();
         }
 
-        final String key = apiClass.getName() + methodName + Arrays.toString(paramTypes);
+        final String key = apiImpl.getName() + methodName + Arrays.toString(paramTypes);
 
         Method method = methodCache.get(key);
 
         if (method == null) {
             try {
-                method = apiClass.getDeclaredMethod(methodName, paramTypes);
+                method = apiImpl.getDeclaredMethod(methodName, paramTypes);
             } catch (NoSuchMethodException e) {
-                for (Class<?> current = apiClass; current != null; current = current.getSuperclass()) {
+                for (Class<?> current = apiImpl; current != null; current = current.getSuperclass()) {
                     for (Method m : current.getDeclaredMethods()) {
                         if (m.getName().equals(methodName) && areParamsExtendable(paramTypes, m.getParameterTypes())) {
                             method = m;
@@ -114,7 +120,7 @@ public class KothaServer {
 
         Future<?> f;
         try {
-            f = (Future<?>) method.invoke(apiClass.newInstance(), args);
+            f = (Future<?>) method.invoke(apiImpl.newInstance(), args);
         } catch (Throwable t) {
             ((SettableFuture<?>) (f = SettableFuture.create())).setException(t);
         }
