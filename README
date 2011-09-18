@@ -20,14 +20,14 @@ Here are the steps to add a new API method of your own using the Kotha framework
 Simplicity:
 The source code here provides an example usage of Kotha. To test it yourself, run Server1.java and Server2.java and then run Client.java.
 There is only a single 300-line Java code file that does all the work (Kotha.java) that you can read.
-Kotha.java itself has only 2 public methods that you call:
+Kotha.java itself has only 3 public entities for you to use:
 1) Call Kotha.startServer when you start the Server
-2) Call Kotha.connectToServer when you start the Client
+2) Call Kotha.connectToServers when you start the Client
 3) An annotation Kotha.NotImplemented for servers to denote if any API they did not implement
 
 TODO:
 1) Stress testing frameworks
 2) Unit tests
 3) Use Guice to bind APIs instead for Client?
-4) Get rid of Futures
-
+4) Get rid of Futures - introduce sync and async. On client side it would be API sync = async
+5) Handle server going down

@@ -1,11 +1,11 @@
 package example.server;
 
-import kotha.Kotha;
+import kotha.KothaServer;
 
 public class Server2 {
 
     public static void main(String[] args) {
-        Kotha.startServer(54556, APIImpl2.class);
+        KothaServer.startServer(54556, APIImpl2.class);
     }
 
 }

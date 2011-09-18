@@ -1,16 +1,14 @@
 package example.client;
 
 import com.google.common.util.concurrent.Futures;
-
 import example.common.API;
-import kotha.Kotha;
-
 import java.util.concurrent.Future;
+import kotha.KothaClient;
 
 public class Client {
 
     public static void main(String[] args) {
-        API api = Kotha.connectToServer(API.class, "localhost:54555", "localhost:54556");
+        API api = KothaClient.connectToServers(API.class, "localhost:54555", "localhost:54556");
 
         testApiCall(api.join("hello", "world"));
         testApiCall(api.appendZero(23));

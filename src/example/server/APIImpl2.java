@@ -2,14 +2,13 @@ package example.server;
 
 import com.google.common.util.concurrent.Futures;
 import example.common.API;
-import kotha.Kotha;
-
 import java.util.concurrent.Future;
+import kotha.KothaServer;
 
 public class APIImpl2 implements API {
 
     @Override
-    @Kotha.NotImplemented
+    @KothaServer.NotImplemented
     public Future<String> join(String a, String b) {
         return null;
     }
@@ -21,7 +20,7 @@ public class APIImpl2 implements API {
     }
 
     @Override
-    @Kotha.NotImplemented
+    @KothaServer.NotImplemented
     public Future<Double> getPi() {
         return null;
     }

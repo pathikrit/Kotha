@@ -2,9 +2,8 @@ package example.server;
 
 import com.google.common.util.concurrent.Futures;
 import example.common.API;
-import kotha.Kotha;
-
 import java.util.concurrent.Future;
+import kotha.KothaServer;
 
 public class APIImpl1 implements API {
 
@@ -15,7 +14,7 @@ public class APIImpl1 implements API {
     }
 
     @Override
-    @Kotha.NotImplemented
+    @KothaServer.NotImplemented
     public Future<Integer> appendZero(Integer i) {
         return null;
     }
@@ -26,7 +25,7 @@ public class APIImpl1 implements API {
     }
 
     @Override
-    @Kotha.NotImplemented
+    @KothaServer.NotImplemented
     public Future<Void> printOnServerConsole(String s) {
         return null;
     }
