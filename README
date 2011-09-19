@@ -8,8 +8,9 @@ Current solutions:
 1) Use some API description language like WSDL - This works but not only you have to mess with XML files and learn a whole set of new tools and DSLs, the auto generated code looks ugly and generates tons of boiler plate codes and files. Also there is no easy way to talk to multiple different servers
 2) Use the Java RMI framework - This again works and guarantees type safety but you have to mess with rmiregistries and security settings and there is no easy way to connect to different servers or add new API methods
 3) Roll something of your own - This usually involves creating some kind function map from special opcodes sent over the wire to actual server side API implementations. This has the opposite problem of the above - its much smaller and easier to maintain and no DSLs involved and you can handle multiple servers but its very hard to do type checking or add new API methods
-4) Use Hessian - This is cool and very similar to the ideas presented here but you need to run your own server to run the servlet and can't simply run a single simple Java server/client program
+4) Use Hessian - This is cool and very similar to the ideas presented here but you need to run your own servlet container to run the server and can't simply run a single simple Java server/client program
 5) Use KryoNet's ObjectSpace RMI library - This is probably the best current solution out there but you still have to write Client side boiler plate code to register your messages
+6) Use akka.io - Nice clean syntax but no type safety
 
 My solution:
 Here are the steps to add a new API method of your own using the Kotha framework. Let's say you want to add a new API "boolean isEven(int x)" which returns true iff x is even:
@@ -20,9 +21,9 @@ Here are the steps to add a new API method of your own using the Kotha framework
 Simplicity:
 The source code here provides an example usage of Kotha. To test it yourself, run Server1.java and Server2.java and then run Client.java.
 The source code is itself only 300 lines long, spread over just 3 Java files and has only 2 public methods you can call:
-1) KothaServer.java - call KothaServer.start(port) to start a server in your Server
-2) KothaClient.java - call KothaClient.connecTo(servers...) to connect to servers in your Client
-1) Kotha.java - An internal utility class containing common methods used by KothaServer and KothaClient
+1) KothaServer.java - call KothaServer.start(port) to start a server (call from your Server class)
+2) KothaClient.java - call KothaClient.connecTo(servers...) to connect to servers (call from your Client class)
+1) KothaCommon.java - An internal utility class containing common methods used by KothaServer and KothaClient
 
 TODO:
 1) Stress testing frameworks
@@ -30,3 +31,4 @@ TODO:
 3) Use Guice to bind APIs instead for Client?
 4) Get rid of Futures - introduce sync and async. On client side it would be API sync = async
 5) Handle server going down
+6) Javadoc

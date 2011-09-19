@@ -4,7 +4,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryonet.EndPoint;
 import com.esotericsoftware.kryonet.Listener;
 
-import com.google.common.collect.Maps;
+import com.google.common.cache.*;
 
 import de.javakaffee.kryoserializers.*;
 
@@ -14,7 +14,7 @@ import java.util.*;
 
 import org.slf4j.Logger;
 
-class Kotha {
+class KothaCommon {
 
     static void setup(EndPoint endPoint, Listener listener) {
         Kryo kryo = endPoint.getKryo();
@@ -45,19 +45,16 @@ class Kotha {
         return null;
     }
 
-    private final static Map<Method, String> methodSignatureCache = Maps.newHashMap();
-
-    static String getMethodSignature(Method m) {
-        String signature = methodSignatureCache.get(m);
-        if (signature == null) {
-            signature = m.getName() + "(";
+    static Cache<Method, String> methodSignatureCache = CacheBuilder.newBuilder().build(new CacheLoader<Method, String>() {
+        @Override
+        public String load(Method m) throws Exception {
+            String signature = m.getName() + "(";
             for (Class<?> p : m.getParameterTypes()) {
                 signature += p.getName() + ",";
             }
-            methodSignatureCache.put(m, signature += ")");
+            return signature;
         }
-        return signature;
-    }
+    });
 
     static class RMIMessage {
 

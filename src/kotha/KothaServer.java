@@ -23,7 +23,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import static kotha.Kotha.*;
+import static kotha.KothaCommon.*;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,25 +31,23 @@ import org.slf4j.LoggerFactory;
 public class KothaServer<T> {
 
     private final static Logger log = LoggerFactory.getLogger(KothaServer.class);
-    private final static Map<String, Method> methodCache = Maps.newHashMap();
+
+    private final static int MAX_SERVER_THREADS = 20;
 
     @Retention(RetentionPolicy.RUNTIME)
     @Target(ElementType.METHOD)
     public static @interface NotImplemented {
     }
 
-    private final static int MAX_SERVER_THREADS = 20;
-
     private final Class<T> apiClass;
     private final T apiImpl;
-
 
     public KothaServer(Class<T> apiClass) {
         this.apiClass = apiClass;
         try {
             apiImpl = apiClass.newInstance();
         } catch (Throwable t) {
-            throw new RuntimeException(t);
+            throw new RuntimeException("Could not create API implementation for " + apiClass, t);
         }
     }
 
@@ -81,7 +79,7 @@ public class KothaServer<T> {
                     List<String> services = Lists.newArrayList();
                     for (Method m : apiClass.getDeclaredMethods()) {
                         if (!m.isAnnotationPresent(NotImplemented.class)) {
-                            final String methodSignature = getMethodSignature(m);
+                            final String methodSignature = methodSignatureCache.getUnchecked(m);
                             services.add(methodSignature);
                             log.info("This server implements " + methodSignature);
                         }
@@ -94,6 +92,8 @@ public class KothaServer<T> {
             error(log, "Could not start server", t);
         }
     }
+
+    private final static Map<String, Method> methodCache = Maps.newHashMap();
 
     private RMIMessage execute(RMIMessage message) throws Throwable {
         final long id = message.id;

@@ -22,7 +22,7 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static kotha.Kotha.*;
+import static kotha.KothaCommon.*;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -110,7 +110,7 @@ public class KothaClient<T> {
         return (T) Proxy.newProxyInstance(apiClass.getClassLoader(), new Class[]{apiClass}, new InvocationHandler() {
             @Override
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-                final String methodSignature = getMethodSignature(method);
+                final String methodSignature = methodSignatureCache.get(method);
                 final Connection connection = serviceLocationCache.get(methodSignature);
                 if (connection == null || !clientConnections.get(clientId).contains(connection)) {
                     return error(log, "Could not find server implementing " + methodSignature, null);
