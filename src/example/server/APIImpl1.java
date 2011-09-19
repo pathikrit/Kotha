@@ -1,8 +1,11 @@
 package example.server;
 
 import com.google.common.util.concurrent.Futures;
+
 import example.common.API;
+
 import java.util.concurrent.Future;
+
 import kotha.KothaServer;
 
 public class APIImpl1 implements API {

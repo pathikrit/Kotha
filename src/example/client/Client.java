@@ -1,8 +1,11 @@
 package example.client;
 
 import com.google.common.util.concurrent.Futures;
+
 import example.common.API;
+
 import java.util.concurrent.Future;
+
 import kotha.KothaClient;
 
 public class Client {

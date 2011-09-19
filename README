@@ -19,11 +19,10 @@ Here are the steps to add a new API method of your own using the Kotha framework
 
 Simplicity:
 The source code here provides an example usage of Kotha. To test it yourself, run Server1.java and Server2.java and then run Client.java.
-There is only a single 300-line Java code file that does all the work (Kotha.java) that you can read.
-Kotha.java itself has only 3 public entities for you to use:
-1) Call Kotha.startServer when you start the Server
-2) Call Kotha.connectToServers when you start the Client
-3) An annotation Kotha.NotImplemented for servers to denote if any API they did not implement
+The source code is itself only 300 lines long, spread over just 3 Java files and has only 2 public methods you can call:
+1) KothaServer.java - call KothaServer.start(port) to start a server in your Server
+2) KothaClient.java - call KothaClient.connecTo(servers...) to connect to servers in your Client
+1) Kotha.java - An internal utility class containing common methods used by KothaServer and KothaClient
 
 TODO:
 1) Stress testing frameworks
