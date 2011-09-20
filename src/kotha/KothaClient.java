@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
@@ -38,7 +39,6 @@ public class KothaClient<T> {
 
     private final static int CONNECTION_TIMEOUT_MS = 5 * 1000;
 
-    private final static AtomicLong CLIENTS = new AtomicLong();
     private final static AtomicLong CLIENT_REQUESTS = new AtomicLong();
 
     private final static Set<Client> clients = Sets.newHashSet();
@@ -48,81 +48,94 @@ public class KothaClient<T> {
 
     private final static Map<String, Connection> serviceLocationCache = Maps.newHashMap();
 
+    private static APIResult<Object,Exception> makeServerCall(Connection wire, String methodName, Object... args) {
+        final long id = CLIENT_REQUESTS.incrementAndGet();
+        timers.put(id, new Stopwatch().start());
+        APIResultImpl<Object> result = new APIResultImpl<Object>();
+        apiCalls.put(id, result);
+        wire.sendTCP(new RMIMessage(id, methodName, args));
+        return result;
+    }
+    
     private final Class<T> apiClass;
     private final long clientId;
 
     public KothaClient(Class<T> apiClass) {
         this.apiClass = apiClass;
-        this.clientId = CLIENTS.incrementAndGet();
+        this.clientId = new Random().nextLong();
     }
 
-    public T connectTo(final String server1, final String... addresses) {
+    /**
+     * Connect to the servers
+     * @param server [mandatory]
+     * @param addresses [optional list of servers]
+     */
+    public T connectTo(final String server, final String... servers) {
+    	if(server == null) throw new IllegalArgumentException("Server cannot be null");
+    	
         try {
-            Set<String> connectTo = Sets.newHashSet(server1);
-            if (addresses != null) {
-                Collections.addAll(connectTo, addresses);
+        	Set<String> serverList = Sets.newHashSet(server);
+            if (servers != null) {
+                Collections.addAll(serverList, servers);
             }
-
-            for (String server : connectTo) {
-                final Client client = new Client();
-
-                setup(client, new Listener() {
-                	CountDownLatch bootstrapped = new CountDownLatch(addresses.length);
-                	
-                    @Override
-                    public void connected(Connection connection) {
-                        super.connected(connection);
-                        clientConnections.put(clientId, connection);
-                    }
-
-                    @Override
-                    public void disconnected(Connection connection) {
-                        super.disconnected(connection);
-                        clientConnections.get(clientId).remove(connection);
-                    }
-
-                    @Override
-                    @SuppressWarnings("unchecked")
-                    public void received(Connection connection, Object message) {
-                        super.received(connection, message);
-                        if (message instanceof List<?>) {
-                            for (String method : (List<String>) message) {
-                                if (serviceLocationCache.put(method, connection) != null) {
-                                    log.warn("Multiple implementations of " + method + " found");
-                                }
-                            }
-                            bootstrapped.countDown();
-                        } else if (message instanceof RMIMessage) {
-                        	try { bootstrapped.await(); // wait until we receive the api from server
-							} catch (InterruptedException e1) { 
-								disconnect();
-								return;
-							} 
-                        	
-                            RMIMessage rmiMessage = (RMIMessage) message;
-                            APIResult<?, Exception> result = (APIResult<?, Exception>)rmiMessage.args[0];
-                            try { apiCalls.remove(rmiMessage.id).done(result.get()); }
-                            catch(Exception e) { apiCalls.remove(rmiMessage.id).done(e); }
-                            log.info(rmiMessage.methodName + " call took " + timers.remove(rmiMessage.id).stop());
-                        }
-                    }
-                });
-
-                HostAndPort serverLocation = HostAndPort.fromString(server);
-                try {
-                    client.connect(CONNECTION_TIMEOUT_MS, serverLocation.getHostText(), serverLocation.getPort());
-                    clients.add(client);
-                } catch (Throwable t) {
-                    error(log, "Could not connect to " + server, t);
-                }
+            
+            for (String connectTo : serverList) {
+	            final Client client = new Client();
+	
+	            setup(client, new Listener() {
+	            	CountDownLatch bootstrapped = new CountDownLatch(servers.length + 1);
+	            	
+	                @Override
+	                public void connected(Connection connection) {
+	                    super.connected(connection);
+	                    clientConnections.put(clientId, connection);
+	                }
+	
+	                @Override
+	                public void disconnected(Connection connection) {
+	                    super.disconnected(connection);
+	                    clientConnections.get(clientId).remove(connection);
+	                }
+	
+	                @Override
+	                @SuppressWarnings("unchecked")
+	                public void received(Connection connection, Object message) {
+	                    super.received(connection, message);
+	                    if (message instanceof List<?>) {
+	                        for (String method : (List<String>) message) {
+	                            if (serviceLocationCache.put(method, connection) != null) {
+	                                log.warn("Multiple implementations of " + method + " found");
+	                            }
+	                        }
+	                        bootstrapped.countDown();
+	                    } else if (message instanceof RMIMessage) {                   	
+	                        RMIMessage rmiMessage = (RMIMessage) message;
+	                        APIResult<?, Exception> result = (APIResult<?, Exception>)rmiMessage.args[0];
+	                        try { apiCalls.remove(rmiMessage.id).done(result.get()); }
+	                        catch(Exception e) { apiCalls.remove(rmiMessage.id).done(e); }
+	                        log.info(rmiMessage.methodName + " call took " + timers.remove(rmiMessage.id).stop());
+	                    }
+	                }
+	            });
+	
+	            HostAndPort serverLocation = HostAndPort.fromString(connectTo);
+	            try {
+	                client.connect(CONNECTION_TIMEOUT_MS, serverLocation.getHostText(), serverLocation.getPort());
+	                clients.add(client);
+	            } catch (Throwable t) {
+	                error(log, "Could not connect to " + server, t);
+	            }
             }
-
+            
             return getRemoteCaller();
         } catch (Throwable t) {
             return error(log, "Could not start client", t);
         }
     }
     
+    /**
+     * Disconnect from all servers and finish all blocking api requests
+     */
     public void disconnect() {
     	// Closing all the clients;
     	Iterator<Client> client = clients.iterator();
@@ -153,14 +166,5 @@ public class KothaClient<T> {
                 return makeServerCall(connection, method.getName(), args == null ? new Object[0] : args);
             }
         });
-    }
-
-    private static APIResult<Object,Exception> makeServerCall(Connection wire, String methodName, Object... args) {
-        final long id = CLIENT_REQUESTS.incrementAndGet();
-        timers.put(id, new Stopwatch().start());
-        APIResultImpl<Object> result = new APIResultImpl<Object>();
-        apiCalls.put(id, result);
-        wire.sendTCP(new RMIMessage(id, methodName, args));
-        return result;
     }
 }

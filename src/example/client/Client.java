@@ -20,7 +20,7 @@ public class Client {
     }
 
     private static void testApiCall(APIResult<?,Exception> result) throws InterruptedException {
-        try { System.out.println("Got result from server: " + result.blockingGet());
-		} catch (Exception e) { e.printStackTrace(); }
+        try { System.out.println("Got result from server: " + result.blockingGet()); } 
+        catch (Exception e) { e.printStackTrace(); }
     }
 }

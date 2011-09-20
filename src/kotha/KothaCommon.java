@@ -51,6 +51,10 @@ public class KothaCommon {
 		public T blockingGet() throws InterruptedException, E;
 	}
 	
+	/**
+	 * Implementation of the APIResult
+	 * @param <T> result type
+	 */
 	public static class APIResultImpl<T> implements APIResult<T, Exception>{
 		AtomicReference<T> result = new AtomicReference<T>(null);
 		AtomicReference<Exception> exception = new AtomicReference<Exception>(null);
@@ -69,11 +73,10 @@ public class KothaCommon {
 			done(null, exception);
 		}
 		
-		private void done(T result, Exception exception) {
-			if(this.result.get() != null || this.exception.get() != null) 
-				throw new IllegalStateException("Done called twice");
-			if(result != null && exception != null) 
-				throw new IllegalArgumentException("Result and exception both cannot be null");
+		private synchronized void done(T result, Exception exception) {
+			if(isDone()) throw new IllegalStateException("Done called twice");
+			if(result != null && exception != null) throw new IllegalArgumentException("Result and exception both cannot be null");
+			
 			this.result.set(result);
 			this.exception.set(exception);
 			done.countDown();

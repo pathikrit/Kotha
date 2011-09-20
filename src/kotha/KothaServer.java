@@ -32,10 +32,20 @@ public class KothaServer<T> {
     private final static Logger log = LoggerFactory.getLogger(KothaServer.class);
 
     private final static int MAX_SERVER_THREADS = 20;
-
+    private final static Map<String, Method> methodCache = Maps.newHashMap();
+    
     @Retention(RetentionPolicy.RUNTIME)
     @Target(ElementType.METHOD)
     public static @interface NotImplemented {
+    }
+    
+    private static boolean areParamsExtendable(Class<?>[] classes, Class<?>[] superClasses) {
+        for (int i = 0; i < classes.length; i++) {
+            if (classes[i] != null && !Primitives.wrap(superClasses[i]).isAssignableFrom(Primitives.wrap(classes[i]))) {
+                return false;
+            }
+        }
+        return classes.length == superClasses.length;
     }
 
     private final Class<T> apiClass;
@@ -49,50 +59,51 @@ public class KothaServer<T> {
             throw new RuntimeException("Could not create API implementation for " + apiClass, t);
         }
     }
+    
+    class ServerListener extends Listener {
+    	final Executor executor = Executors.newFixedThreadPool(MAX_SERVER_THREADS);
+    	
+    	@Override
+    	public void received(final Connection connection, final Object message) {
+            super.received(connection, message);
+            if (message instanceof RMIMessage) {
+                executor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            connection.sendTCP(execute((RMIMessage) message));
+                        } catch (Throwable t) {
+                            error(log, "Error in server api call", t);
+                        }
+                    }
+                });
+            }
+        }
+
+    	@Override
+        public void connected(Connection connection) {
+            super.connected(connection);
+            List<String> services = Lists.newArrayList();
+            for (Method m : apiClass.getDeclaredMethods()) {
+                if (!m.isAnnotationPresent(NotImplemented.class)) {
+                    final String methodSignature = methodSignatureCache.getUnchecked(m);
+                    services.add(methodSignature);
+                    log.info("This server implements " + methodSignature);
+                }
+            }
+            connection.sendTCP(services);
+        }
+    }
 
     public void start(final int tcpPort) {
         try {
-            final Executor executor = Executors.newFixedThreadPool(MAX_SERVER_THREADS);
             Server server = new Server();
-            setup(server, new Listener() {
-                @Override
-                public void received(final Connection connection, final Object message) {
-                    super.received(connection, message);
-                    if (message instanceof RMIMessage) {
-                        executor.execute(new Runnable() {
-                            @Override
-                            public void run() {
-                                try {
-                                    connection.sendTCP(execute((RMIMessage) message));
-                                } catch (Throwable t) {
-                                    error(log, "Error in server api call", t);
-                                }
-                            }
-                        });
-                    }
-                }
-
-                @Override
-                public void connected(Connection connection) {
-                    super.connected(connection);
-                    List<String> services = Lists.newArrayList();
-                    for (Method m : apiClass.getDeclaredMethods()) {
-                        if (!m.isAnnotationPresent(NotImplemented.class)) {
-                            final String methodSignature = methodSignatureCache.getUnchecked(m);
-                            services.add(methodSignature);
-                            log.info("This server implements " + methodSignature);
-                        }
-                    }
-                    connection.sendTCP(services);
-                }
-            });
+            setup(server, new ServerListener());
             server.bind(tcpPort);
         } catch (Throwable t) {
             error(log, "Could not start server", t);
         }
     }
-
-    private final static Map<String, Method> methodCache = Maps.newHashMap();
 
     private RMIMessage execute(RMIMessage message) throws Throwable {
         final long id = message.id;
@@ -125,14 +136,5 @@ public class KothaServer<T> {
         }
 
         return new RMIMessage(id, methodName, method.invoke(apiImpl, args));
-    }
-
-    private static boolean areParamsExtendable(Class<?>[] classes, Class<?>[] superClasses) {
-        for (int i = 0; i < classes.length; i++) {
-            if (classes[i] != null && !Primitives.wrap(superClasses[i]).isAssignableFrom(Primitives.wrap(classes[i]))) {
-                return false;
-            }
-        }
-        return classes.length == superClasses.length;
     }
 }
