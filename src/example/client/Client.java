@@ -1,28 +1,26 @@
 package example.client;
 
-import com.google.common.util.concurrent.Futures;
-
-import example.common.API;
-
-import java.util.concurrent.Future;
-
 import kotha.KothaClient;
+import kotha.KothaCommon.APIResult;
+import example.common.API;
 
 public class Client {
 
-    public static void main(String[] args) {
-        API api = new KothaClient<API>(API.class).connectTo("localhost:54555", "localhost:54556");
-
-        testApiCall(api.join("hello", "world"));
-        testApiCall(api.appendZero(23));
-        testApiCall(api.getPi());
-        testApiCall(api.printOnServerConsole("howdy"));
+    public static void main(String[] args) throws InterruptedException, Exception {
+    	KothaClient<API> kothaClient = new KothaClient<API>(API.class);
+        API api = kothaClient.connectTo("localhost:54555", "localhost:54556");
+        try {
+	        testApiCall(api.join("hello", "world"));
+	        testApiCall(api.appendZero(23));
+	        testApiCall(api.getPi());
+	        testApiCall(api.printOnServerConsole("howdy"));
+        } finally {
+        	kothaClient.disconnect();
+        }
     }
 
-    private static void testApiCall(Future<?> f) {
-        while (!f.isDone()) {
-            //System.out.println('.');
-        }
-        System.out.println("Got result from server: " + Futures.getUnchecked(f));
+    private static void testApiCall(APIResult<?,Exception> result) throws InterruptedException {
+        try { System.out.println("Got result from server: " + result.blockingGet());
+		} catch (Exception e) { e.printStackTrace(); }
     }
 }

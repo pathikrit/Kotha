@@ -1,14 +1,8 @@
 package kotha;
 
-import com.esotericsoftware.kryonet.Connection;
-import com.esotericsoftware.kryonet.Listener;
-import com.esotericsoftware.kryonet.Server;
-
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.primitives.Primitives;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.SettableFuture;
+import static kotha.KothaCommon.error;
+import static kotha.KothaCommon.methodSignatureCache;
+import static kotha.KothaCommon.setup;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -18,15 +12,20 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
-import static kotha.KothaCommon.*;
+import kotha.KothaCommon.RMIMessage;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.esotericsoftware.kryonet.Connection;
+import com.esotericsoftware.kryonet.Listener;
+import com.esotericsoftware.kryonet.Server;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.primitives.Primitives;
 
 public class KothaServer<T> {
 
@@ -125,14 +124,7 @@ public class KothaServer<T> {
             methodCache.put(key, method);
         }
 
-        Future<?> f;
-        try {
-            f = (Future<?>) method.invoke(apiImpl, args);
-        } catch (Throwable t) {
-            ((SettableFuture<?>) (f = SettableFuture.create())).setException(t);
-        }
-
-        return new RMIMessage(id, methodName, Futures.getUnchecked(f));
+        return new RMIMessage(id, methodName, method.invoke(apiImpl, args));
     }
 
     private static boolean areParamsExtendable(Class<?>[] classes, Class<?>[] superClasses) {
