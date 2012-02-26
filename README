@@ -32,3 +32,4 @@ TODO:
 4) Get rid of Futures - introduce sync and async. On client side it would be API sync = async
 5) Handle server going down
 6) Javadoc
+7) Implement Cacheable annotation
